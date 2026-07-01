@@ -61,9 +61,39 @@ Config schema (§4) → governance metadata (§5.9) → sample design + DoD (§5
 guards; splits unchanged on default configs; deterministic model version retained.
 
 ### Commit
-- Baseline: `3db26a9`. Phase B commit hash recorded in the Phase C entry (committed at end of B).
+- Baseline: `3db26a9`  ·  Phase B: `d670dba`.
 
-## Phase C — Evaluation upgrade ⏳
+## Phase C — Evaluation upgrade ✅ (complete)
+
+Discrimination with uncertainty (§5.3) → extended calibration backtest (§5.5) → MDD ch 8, 10.
+Closes gaps #4 (no uncertainty) and #10 (no optimism correction), part of #5 (calibration).
+
+**Delivered:**
+- **`evaluation/discrimination.py` (§5.3):** AUC/Gini/KS with seeded bootstrap CIs (BCa /
+  percentile / basic), McClish partial AUC, Somers' D, decile lift & cumulative gains, and
+  **.632+ optimism correction** (Efron & Gong 1983) refitting the reportable logit form on
+  each bootstrap OOB sample. Emits `discrimination.json`. `metrics.py` is now a thin shim
+  re-exporting `auc/gini/ks` (single source of truth) — no bare Gini without a CI beside it.
+- **`evaluation/calibration.py` (§5.5):** Brier, ECE, Hosmer-Lemeshow, reliability curve, and
+  **per-grade Jeffreys backtest** with binomial **traffic-light** (green/yellow/red) + grade
+  HHI. Emits `calibration_backtest.json` + `reports/figures/reliability_curve.png`.
+- **MDD:** new sections 8a (discrimination + CIs + optimism) and 8b (calibration traffic light).
+- **Pipeline:** both computed on the fitted model; artifacts hashed into the model card;
+  bootstrap seeded so `model.json` version stays deterministic (verified by regression test).
+
+**Tests:** `test_discrimination_ci.py` (CI covers analytic AUC≈0.94 on two Gaussians; BCa/
+percentile/basic; seeded determinism; optimism ≤ apparent) and `test_calibration_traffic_light.py`
+(all-green on calibrated, red on 2× miscalibrated; Jeffreys/binomial bounds).
+- Full suite: **107 passed**. ruff + format + mypy clean.
+- Coverage: **95% overall**; `evaluation/discrimination.py` 95%, `evaluation/calibration.py` 97%
+  (meets the ≥95% `evaluation/` gate).
+
+**Note (risk R3):** suite runtime rose to ~3.5 min from bootstrap work; kept in check by small
+iteration counts in the test configs. Will revisit if it grows further.
+
+### Commit
+- Phase C: `<pending>`.
+
 ## Phase D — Validation upgrade ⏳
 ## Phase E — Fairness & Monitoring ⏳
 ## Phase F — Governance & MDD finalisation ⏳

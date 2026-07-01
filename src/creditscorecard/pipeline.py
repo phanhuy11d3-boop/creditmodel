@@ -24,10 +24,19 @@ from creditscorecard.data.definition_of_default import save_sample_design
 from creditscorecard.data.schema import validate_dataframe
 from creditscorecard.data.split import SplitData, split_data
 from creditscorecard.evaluation import curves
+from creditscorecard.evaluation.calibration import (
+    compute_calibration_backtest,
+    plot_reliability_curve,
+    save_calibration_backtest,
+)
 from creditscorecard.evaluation.calibration_checks import (
     anchor_gap,
     curve_shape_check,
     mape_by_grade,
+)
+from creditscorecard.evaluation.discrimination import (
+    compute_discrimination,
+    save_discrimination,
 )
 from creditscorecard.evaluation.metrics import metrics_table
 from creditscorecard.evaluation.stability import freeze_reference, herfindahl_hirschman_index
@@ -121,6 +130,18 @@ def run_pipeline(config: Config) -> PipelineResult:
         {k: v["status"] for k, v in validation.items() if isinstance(v, dict) and "status" in v},
     )
 
+    # --- §5.3 discrimination with uncertainty (bootstrap CIs + .632+ optimism) ---
+    discrimination = compute_discrimination(
+        probs, config, optimism_inputs=(Xtr_woe, ytr, model.woe_columns)
+    )
+    save_discrimination(discrimination, config)
+
+    # --- §5.5 calibration backtest (Brier/ECE/HL + per-grade Jeffreys traffic light) ---
+    calibration_bt = compute_calibration_backtest(
+        probs["train"][0], probs["train"][1], train_grades, config
+    )
+    save_calibration_backtest(calibration_bt, config)
+
     # --- figures ---
     fig_dir = config.reports_path() / "figures"
     y_test, p_test = probs["test"]
@@ -131,12 +152,15 @@ def run_pipeline(config: Config) -> PipelineResult:
         "score_distribution": str(
             curves.plot_score_distribution(scores["train"], probs["train"][0], fig_dir)
         ),
+        "reliability_curve": str(plot_reliability_curve(calibration_bt, fig_dir)),
     }
 
     # --- payload / artifacts ---
     payload = _build_payload(
         config, model, calibration, scorecard, woe, selection, reference, metrics, split, validation
     )
+    payload["discrimination"] = discrimination.to_dict()
+    payload["calibration_backtest"] = calibration_bt.to_dict()
     tables = _build_tables(woe, selection, scorecard, metrics, model.features)
     artifacts_path = save_artifacts(payload, config, tables)
 

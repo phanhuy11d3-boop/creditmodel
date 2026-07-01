@@ -232,6 +232,9 @@ def _build_markdown(payload, tables, figures) -> str:  # noqa: PLR0915
     for label, fig in figures.items():
         parts.append(f"**{label}**\n\n![{label}]({_fig_rel(fig)})\n")
 
+    parts.append(_discrimination_md(payload.get("discrimination", {})))
+    parts.append(_calibration_backtest_md(payload.get("calibration_backtest", {})))
+
     parts.append("## 9. Validation Summary\n")
     parts.append(_validation_summary_md(payload.get("validation_summary", {})))
 
@@ -249,6 +252,84 @@ def _build_markdown(payload, tables, figures) -> str:  # noqa: PLR0915
     )
 
     return "\n".join(parts)
+
+
+def _ci(metric: dict[str, Any]) -> str:
+    return (
+        f"{metric['point']:.4f} "
+        f"[{metric['lower']:.4f}, {metric['upper']:.4f}] "
+        f"({metric['method']} {int(metric['level'] * 100)}%)"
+    )
+
+
+def _discrimination_md(disc: dict[str, Any]) -> str:
+    """§5.3 — discrimination with bootstrap CIs, partial AUC, Somers' D, .632+ optimism."""
+    if not disc:
+        return ""
+    parts = ["## 8a. Discrimination with Uncertainty (§5.3)\n"]
+    rows = []
+    for split, m in disc.get("per_split", {}).items():
+        row = {
+            "split": split,
+            "n": m.get("n"),
+            "AUC [CI]": _ci(m["auc"]),
+            "Gini [CI]": _ci(m["gini"]),
+            "KS [CI]": _ci(m["ks"]),
+        }
+        if "partial_auc" in m:
+            row["pAUC"] = f"{m['partial_auc']:.4f}"
+        if "somers_d" in m:
+            row["Somers' D"] = f"{m['somers_d']:.4f}"
+        rows.append(row)
+    if rows:
+        parts.append(df_to_md(pd.DataFrame(rows)) + "\n")
+    opt = disc.get("optimism", {})
+    if opt:
+        parts.append(
+            "### In-sample optimism (.632+ bootstrap, Efron & Gong 1983)\n"
+            f"- Apparent AUC **{opt.get('apparent_auc', float('nan')):.4f}** → "
+            f"optimism-corrected **{opt.get('corrected_auc', float('nan')):.4f}** "
+            f"(optimism {opt.get('optimism', float('nan')):.4f}; "
+            f"OOB AUC {opt.get('oob_auc', float('nan')):.4f}).\n"
+        )
+    return "".join(parts)
+
+
+def _calibration_backtest_md(cb: dict[str, Any]) -> str:
+    """§5.5 — Brier/ECE/HL + per-grade Jeffreys traffic-light table + grade HHI."""
+    if not cb:
+        return ""
+    parts = ["## 8b. Calibration Backtest (§5.5)\n"]
+    parts.append(
+        f"- **Brier:** {cb.get('brier', float('nan')):.4f}  ·  "
+        f"**ECE:** {cb.get('ece', float('nan')):.4f}  ·  "
+        f"**Hosmer-Lemeshow:** stat={cb.get('hosmer_lemeshow_stat', float('nan')):.2f}, "
+        f"p={cb.get('hosmer_lemeshow_pvalue', float('nan')):.3f}  ·  "
+        f"**Grade HHI:** {cb.get('hhi_grades', float('nan')):.4f}\n"
+    )
+    per_grade = cb.get("per_grade", [])
+    if per_grade:
+        tbl = pd.DataFrame(
+            [
+                {
+                    "grade": g["grade"],
+                    "n": g["n"],
+                    "forecast_pd": round(g["forecast_pd"], 4),
+                    "observed_rate": round(g["observed_rate"], 4),
+                    "jeffreys_upper": round(g["jeffreys_upper"], 4),
+                    "binom_p": round(g["binomial_pvalue"], 4),
+                    "light": g["traffic_light"].upper(),
+                }
+                for g in per_grade
+            ]
+        )
+        parts.append(df_to_md(tbl) + "\n")
+    parts.append(
+        "- Traffic light per grade uses the binomial default count under the forecast PD "
+        "(EBA IRB Validation Handbook 2023): green < green-quantile, yellow up to "
+        "yellow-quantile, red above.\n"
+    )
+    return "".join(parts)
 
 
 def _validation_summary_md(summary: dict[str, Any]) -> str:
