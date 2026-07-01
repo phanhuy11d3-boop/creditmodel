@@ -1,0 +1,29 @@
+# Home Credit Default Risk configuration (Kaggle).
+# Inherits every key from base.yaml; only overrides below are applied.
+data:
+  adapter: csv
+  path: data/raw/home_credit/application_train.csv
+  target: TARGET                # 1 = Bad (payment difficulties), 0 = Good
+  date_column: application_date  # synthetic dates are attached for temporal OOT
+
+split:
+  test_size: 0.2
+  oot_size: 0.2
+  stratify: true
+
+binning:
+  min_bin_pct: 0.05
+  monotonic_trend: auto
+  max_n_bins: 6
+
+selection:
+  iv_min: 0.02
+  iv_suspicious: 0.5
+  vif_threshold: 5.0
+  forward_metric: gini
+
+scaling:
+  pdo: 20
+  target_score: 600
+  target_odds: 50
+  rating_grades: 7

@@ -1,0 +1,64 @@
+# Base configuration for the credit PD scorecard.
+# All values here are safe defaults; environment-specific configs override them.
+seed: 42
+
+data:
+  adapter: synthetic            # csv | synthetic
+  path: null                    # required for the csv adapter
+  target: default               # target column name; 1 = Bad / default event
+  date_column: null             # if present, enables temporal OOT split
+
+split:
+  test_size: 0.2
+  oot_size: 0.2                 # most-recent slice when date_column is set
+  stratify: true
+
+binning:
+  min_bin_pct: 0.05
+  monotonic_trend: auto
+  max_n_bins: 8
+
+selection:
+  iv_min: 0.02
+  iv_suspicious: 0.5
+  vif_threshold: 5.0
+  forward_metric: gini          # gini | auc
+  cv_folds: 5
+
+model:
+  engine: statsmodels           # statsmodels | sklearn
+  enforce_sign_check: true
+  sign_overrides: []            # feature names allowed to keep a wrong sign
+  parity_tol: 1.0e-3            # statsmodels vs sklearn coefficient tolerance
+
+calibration:
+  anchor_default_rate: null     # null = use train base rate
+
+scaling:
+  pdo: 20
+  target_score: 600
+  target_odds: 50               # Good:Bad at target_score
+  rating_grades: 7
+  round_points: true
+
+monitoring:
+  psi_bins: 10
+  psi_warn: 0.10
+  psi_alert: 0.25
+
+validation:
+  gini_min: 0.40         # discriminatory power floor
+  ks_min: 0.35            # discriminatory power floor
+  hhi_max: 0.15            # rating-grade concentration ceiling
+  mape_max: 0.10           # calibration accuracy ceiling (avg PD vs observed bad rate by grade)
+  anchor_gap_max: 0.10     # |mean PD - anchor rate| / anchor rate ceiling
+  curve_shape_n_se: 2.0    # calibration band width in standard errors
+
+tracking:
+  mlflow_enabled: false
+  mlflow_uri: null
+
+paths:
+  artifacts_dir: artifacts
+  reports_dir: reports
+  data_dir: data

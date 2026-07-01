@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.eggs/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Project outputs (artifacts ARE the model, but not version-controlled)
+artifacts/*
+!artifacts/.gitkeep
+reports/figures/*
+!reports/figures/.gitkeep
+reports/mdd/*
+!reports/mdd/.gitkeep
+
+# Data
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# MLflow
+mlruns/
+
+# OS
+.DS_Store
+Thumbs.db

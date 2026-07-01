@@ -1,0 +1,26 @@
+services:
+  api:
+    build: .
+    image: creditscorecard:latest
+    ports:
+      - "8000:8000"
+    environment:
+      CREDITSCORECARD_CONFIG: configs/home_credit.yaml
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional experiment tracking. Enable with:  docker compose --profile mlflow up
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    profiles: ["mlflow"]
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlruns:/mlruns
+
+volumes:
+  mlruns:
