@@ -54,6 +54,108 @@ validation:
   anchor_gap_max: 0.10     # |mean PD - anchor rate| / anchor rate ceiling
   curve_shape_n_se: 2.0    # calibration band width in standard errors
 
+# --- Sample design (Basel-aligned) — refactor §5.1 ---
+sample_design:
+  observation_window_months: 12         # look-back for feature values
+  performance_window_months: 12         # forward window to observe default
+  default_definition:
+    dpd_threshold: 90                   # Basel default = 90 days past due
+    cure_period_months: 3               # months of no DPD to consider cured
+    re_default_treatment: separate      # separate | merge
+  exclusions: []                        # list of {name, rule} pandas query() strings
+  cohort_key: origination_month         # column that defines vintage
+  minimum_seasoning_months: 6           # exclude too-fresh vintages from dev sample
+
+# --- Reject inference — refactor §5.2 ---
+reject_inference:
+  enabled: false                        # requires reject data
+  reject_data_path: null
+  method: parceling                     # parceling | reweighting | fuzzy_augmentation | none
+  bad_rate_multiplier: 3.0              # rejects assumed 2-5x accepts bad rate
+  parcels: 10
+
+# --- Discrimination with uncertainty — refactor §5.3 ---
+discrimination:
+  bootstrap_iterations: 1000
+  bootstrap_method: bca                 # bca | percentile | basic
+  confidence_level: 0.95
+  compute_partial_auc: true
+  partial_auc_range: [0.0, 0.4]
+  compute_somers_d: true
+
+# --- Champion vs challenger — refactor §5.4 ---
+benchmark:
+  enabled: true
+  challenger: gradient_boosting         # gradient_boosting | random_forest | xgboost
+  challenger_params:
+    n_estimators: 200
+    max_depth: 4
+    learning_rate: 0.05
+  delong_test: true
+  interpretability_parity: true
+  gini_gap_threshold: 0.03              # verdict: challenger materially beats reportable model
+  delong_p_threshold: 0.05
+
+# --- Calibration & backtesting — refactor §5.5 ---
+calibration_extended:
+  hosmer_lemeshow_groups: 10
+  compute_brier: true
+  compute_ece: true
+  reliability_curve_bins: 10
+  per_grade_backtest:
+    method: jeffreys                    # jeffreys | binomial | correlated_binomial
+    alpha: 0.05
+    traffic_light:
+      green_upper_quantile: 0.95
+      yellow_upper_quantile: 0.99       # >0.99 = red
+
+# --- Fairness (ECOA / Reg B / disparate impact) — refactor §5.6 ---
+fairness:
+  enabled: true
+  protected_attributes: []              # list of column names if available in data
+  favourable_outcome: approved
+  metrics:
+    - adverse_impact_ratio
+    - standardized_mean_difference
+    - statistical_parity_difference
+    - equal_opportunity_difference
+  air_threshold_warn: 0.90
+  air_threshold_alert: 0.80             # 80% rule
+  proxy_scan: true
+  acknowledge_failure: false            # AIR < alert is build-failing unless acknowledged
+
+# --- Explainability — refactor §5.8 ---
+explainability:
+  shap_enabled: true
+  shap_sample_size: 1000
+  reason_codes_top_n: 4                 # ECOA adverse-action typically 4 reasons
+  global_importance_method: mean_abs_shap
+  interpretability_parity_top_k: 10
+
+# --- Monitoring (multi-period) — refactor §5.7 ---
+monitoring_extended:
+  runlog_backend: sqlite                # sqlite | jsonl
+  runlog_path: monitoring/runlog.db
+  cadence: monthly
+  ave_backtest_enabled: true
+  vintage_analysis_enabled: true
+  psi_history_min_periods: 3
+
+# --- Governance metadata (SR 11-7 §III model inventory) — refactor §5.9 ---
+governance:
+  model_id: PD-APP-001
+  model_name: Application PD Scorecard
+  model_tier: 2                         # 1=highest risk, 3=lowest
+  model_purpose: "Application-stage PD estimate for consumer lending decisioning."
+  owner: null
+  developer: null
+  validator: null
+  approval_date: null
+  next_review_date: null
+  intended_use: "Application-stage approve/decline and interest-rate tier assignment."
+  known_limitations: []
+  assumptions: []
+
 tracking:
   mlflow_enabled: false
   mlflow_uri: null

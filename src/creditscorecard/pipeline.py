@@ -20,6 +20,7 @@ import pandas as pd
 from creditscorecard import __version__
 from creditscorecard.config import Config
 from creditscorecard.data.adapters import load_dataset
+from creditscorecard.data.definition_of_default import save_sample_design
 from creditscorecard.data.schema import validate_dataframe
 from creditscorecard.data.split import SplitData, split_data
 from creditscorecard.evaluation import curves
@@ -33,6 +34,7 @@ from creditscorecard.evaluation.stability import freeze_reference, herfindahl_hi
 from creditscorecard.features.binning import BinningModel
 from creditscorecard.features.selection import run_selection
 from creditscorecard.features.woe import WoETransformer
+from creditscorecard.governance.metadata import build_model_card, save_model_card
 from creditscorecard.logging import get_logger
 from creditscorecard.model.calibrate import calibrate
 from creditscorecard.model.scorecard import build_master_scale, build_scorecard
@@ -71,6 +73,8 @@ def run_pipeline(config: Config) -> PipelineResult:
     df = validate_dataframe(df, config)
     split: SplitData = split_data(df, config)
     logger.info("Split sizes: %s (temporal=%s)", split.describe(), split.temporal)
+    if split.sample_design is not None:
+        save_sample_design(split.sample_design, config)
 
     target = config.data.target
     feat_cols = _feature_columns(df, config)
@@ -135,6 +139,13 @@ def run_pipeline(config: Config) -> PipelineResult:
     )
     tables = _build_tables(woe, selection, scorecard, metrics, model.features)
     artifacts_path = save_artifacts(payload, config, tables)
+
+    # --- governance model card (§5.9): built AFTER artifacts exist so it can hash
+    # them; volatile provenance (timestamp/git SHA) lives here, NOT in model.json,
+    # keeping the model version deterministic (diagnostic risk R6). ---
+    card = build_model_card(config, df, artifacts_dir=config.artifacts_path())
+    save_model_card(card, config)
+
     payload = _reload_version(config, payload)
 
     # --- MDD (imported lazily to avoid a cycle) ---
@@ -167,6 +178,10 @@ def _build_payload(
             "expected_coef_sign": "negative",
         },
         "sample": _sample_info(config, split),
+        "sample_design": (
+            split.sample_design.summary_dict() if split.sample_design is not None else {}
+        ),
+        "governance": config.governance.model_dump(),
         "selected_features": model.features,
         "binning_specs": {f: binning_spec(woe, f) for f in model.features},
         "woe_maps": {f: {str(k): v for k, v in woe.woe_maps[f].items()} for f in model.features},

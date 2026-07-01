@@ -90,6 +90,22 @@ def _build_markdown(payload, tables, figures) -> str:  # noqa: PLR0915
         f"*Package:* {payload.get('package_version', '')}\n"
     )
 
+    gov = payload.get("governance", {})
+    if gov:
+        parts.append("## 0. Governance Metadata (SR 11-7 §III)\n")
+        parts.append(
+            f"- **Model ID / name:** `{gov.get('model_id')}` — {gov.get('model_name')}  ·  "
+            f"**Tier:** {gov.get('model_tier')}\n"
+            f"- **Purpose:** {gov.get('model_purpose')}\n"
+            f"- **Intended use:** {gov.get('intended_use')}\n"
+            f"- **Owner / developer / validator:** {gov.get('owner')} / "
+            f"{gov.get('developer')} / {gov.get('validator')}\n"
+            f"- **Approval / next review:** {gov.get('approval_date')} / "
+            f"{gov.get('next_review_date')}\n"
+            "- Full provenance (git SHA, artifact hashes, package versions, dataset hash) "
+            "and the assumptions/limitations register are in `artifacts/model_card.json`.\n"
+        )
+
     parts.append("## 1. Target, Event Definition & Orientation Convention\n")
     parts.append(
         f"- **Target column:** `{payload['target']}` — event `{conv['event']}`.\n"
@@ -122,6 +138,30 @@ def _build_markdown(payload, tables, figures) -> str:  # noqa: PLR0915
         parts.append(
             "- **Temporal validation unavailable**; OOT is a stratified random hold-out.\n"
         )
+
+    design = payload.get("sample_design", {})
+    if design:
+        flag_desc = (
+            "constructed from DPD/status"
+            if design.get("constructed_default")
+            else "pass-through of supplied binary target (flat sample)"
+        )
+        parts.append(
+            "### Sample design (Basel / EBA §5.1)\n"
+            f"- **Default flag:** {flag_desc}.\n"
+            f"- **Cohort key:** `{design.get('cohort_col') or 'n/a'}`  ·  "
+            f"raw **{design.get('n_raw')}** → post-exclusions "
+            f"**{design.get('n_after_exclusions')}** "
+            f"→ post-seasoning **{design.get('n_after_seasoning')}** "
+            f"(seasoning dropped {design.get('seasoning_dropped', 0)}).\n"
+        )
+        excl = design.get("exclusion_counts") or {}
+        if excl:
+            parts.append(
+                "- **Exclusions:** " + ", ".join(f"{name} ({n})" for name, n in excl.items()) + "\n"
+            )
+        for note in design.get("notes", []):
+            parts.append(f"  - _{note}_\n")
 
     parts.append("## 3. Binning, WoE & IV per Characteristic\n")
     if "iv" in tables:

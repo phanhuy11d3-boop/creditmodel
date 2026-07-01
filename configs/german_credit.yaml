@@ -1,0 +1,38 @@
+# German Credit configuration (offline synthetic adapter).
+# The synthetic adapter emits German-Credit-shaped columns (checking_status, age_years,
+# foreign_worker, ..., target `default`). This config is the home for the fairness (§5.6)
+# and reject-inference (§5.2) examples, which the refactor spec anchors on German Credit's
+# `age` and `foreign_worker` attributes. Inherits every key from base.yaml.
+data:
+  adapter: synthetic
+  target: default                 # 1 = Bad / default event
+  date_column: application_date    # synthetic dates attached for temporal OOT
+
+split:
+  test_size: 0.2
+  oot_size: 0.2
+  stratify: true
+
+binning:
+  min_bin_pct: 0.05
+  monotonic_trend: auto
+  max_n_bins: 8
+
+scaling:
+  pdo: 20
+  target_score: 600
+  target_odds: 50
+  rating_grades: 7
+
+# Fairness anchored on German Credit protected attributes (§5.6). `age_years` is a
+# continuous column; the fairness module dichotomises age at 25 as the spec example.
+fairness:
+  enabled: true
+  protected_attributes:
+    - age_years
+    - foreign_worker
+
+governance:
+  model_id: PD-APP-GC-001
+  model_name: German Credit Application PD Scorecard (demo)
+  model_tier: 3

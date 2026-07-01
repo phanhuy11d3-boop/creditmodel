@@ -1,9 +1,19 @@
 """Train / in-time test / out-of-time (OOT) splitting.
 
-When a date column exists the OOT slice is the **most recent** fraction, cut
-*before* any fitting; the older development portion is split (stratified,
-random) into train and in-time test. Without a date column, all three splits are
-stratified-random and we log that temporal validation is unavailable.
+Splitting is the second stage of sample construction: the frame first passes through
+the §5.1 sample-design module (default flag, cohort, exclusions, seasoning — see
+:mod:`creditscorecard.data.definition_of_default`), then this module carves it into
+train / in-time test / out-of-time slices.
+
+When a date column exists the OOT slice is the **most recent** fraction, cut *before*
+any fitting; the older development portion is split (stratified, random) into train and
+in-time test. Without a date column, all three splits are stratified-random and we log
+that temporal validation is unavailable.
+
+Backward-compatibility (diagnostic risk R1): with the default configs (no DPD/status/
+origination columns, no exclusions) sample design is a no-op on the modelling frame, so
+splits are byte-identical to the legacy behaviour. The sample-design *summary* is still
+computed and attached to :class:`SplitData` for the artifact/MDD.
 """
 
 from __future__ import annotations
@@ -14,6 +24,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from creditscorecard.config import Config
+from creditscorecard.data.definition_of_default import SampleDesignResult, run_sample_design
 from creditscorecard.logging import get_logger
 
 logger = get_logger(__name__)
@@ -25,12 +36,33 @@ class SplitData:
     test: pd.DataFrame
     oot: pd.DataFrame
     temporal: bool
+    sample_design: SampleDesignResult | None = None
 
     def describe(self) -> dict[str, int]:
         return {"train": len(self.train), "test": len(self.test), "oot": len(self.oot)}
 
 
 def split_data(df: pd.DataFrame, config: Config) -> SplitData:
+    # Stage 1: sample design (default flag, cohort, exclusions, seasoning).
+    design = run_sample_design(df, config)
+    modelling = design.frame
+    # The cohort column is auditing metadata, not a feature — drop it before splitting
+    # so the feature matrix is unchanged versus the legacy pipeline (risk R1).
+    if design.cohort_col and design.cohort_col in modelling.columns:
+        modelling = modelling.drop(columns=[design.cohort_col])
+
+    split = _carve(modelling, config)
+    return SplitData(
+        train=split.train,
+        test=split.test,
+        oot=split.oot,
+        temporal=split.temporal,
+        sample_design=design,
+    )
+
+
+def _carve(df: pd.DataFrame, config: Config) -> SplitData:
+    """Legacy train/test/OOT carving on an already-designed modelling frame."""
     target = config.data.target
     date_col = config.data.date_column
     seed = config.seed

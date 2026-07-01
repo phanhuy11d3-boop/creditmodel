@@ -28,8 +28,40 @@ Per §8, one entry per phase. Each phase must end with tests green before the ne
 
 ---
 
-## Phase B — Foundations rebuild ⏳ (not started)
+## Phase B — Foundations rebuild ✅ (complete)
+
 Config schema (§4) → governance metadata (§5.9) → sample design + DoD (§5.1) → regression test.
+
+**Delivered:**
+1. **Config schema (§4):** 9 new pydantic blocks in `config.py` (`sample_design`,
+   `reject_inference`, `discrimination`, `benchmark`, `calibration_extended`, `fairness`,
+   `explainability`, `monitoring_extended`, `governance`) + defaults in `base.yaml`, all
+   fail-fast validated. Added optional column-name fields to `sample_design` to close the
+   §4 underspecification (§5.1 needs to *name* the DPD/status/origination columns).
+2. **Governance metadata (§5.9):** new `governance/metadata.py` — model card with git SHA,
+   package/interpreter versions, deterministic dataset + artifact SHA-256 hashes, seed,
+   timestamp; auto-detected assumptions/limitations (KGB when reject inference off; missing
+   fairness when no protected attrs). Emits `artifacts/model_card.json`. Volatile provenance
+   kept **out** of `model.json`'s version hash (risk R6) → model version stays deterministic.
+3. **Sample design + DoD (§5.1):** new `data/definition_of_default.py` (panel cure/re-default
+   resolution, flat DPD/status construction, cohort assignment, exclusions, seasoning,
+   `sample_design.json`) and rebuilt `data/split.py` to run sample design then carve. **Backward
+   compatible** (risk R1): on the flat synthetic/Home-Credit frames sample design is a no-op on
+   the modelling matrix — splits byte-identical to baseline (verified by `test_regression_baseline`).
+4. **Wiring + config:** governance + sample-design summaries added to the payload/MDD; added
+   `configs/german_credit.yaml` (hosts fairness/reject examples, risk R10).
+
+**Tests (all green):** `test_definition_of_default.py`, `test_sample_design.py`,
+`test_governance_metadata.py`, `test_regression_baseline.py`, and expanded `test_config.py`.
+- Full suite: **96 passed** (was 68); ruff + `ruff format` + mypy clean.
+- Coverage: **95% overall**; `data/definition_of_default.py` 97%, `governance/metadata.py` 98%
+  (meets the ≥95% domain-module gate for the new modules).
+
+**Non-negotiables (§10) preserved:** no change to binning/WoE/selection/scorecard math/leakage
+guards; splits unchanged on default configs; deterministic model version retained.
+
+### Commit
+- Baseline: `3db26a9`. Phase B commit hash recorded in the Phase C entry (committed at end of B).
 
 ## Phase C — Evaluation upgrade ⏳
 ## Phase D — Validation upgrade ⏳
