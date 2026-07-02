@@ -11,6 +11,8 @@ from creditscorecard.evaluation.discrimination import (
     bootstrap_ci,
     compute_discrimination,
     gini,
+    gini_stability_verdict,
+    intervals_overlap,
     ks,
     optimism_632plus_auc,
     partial_auc,
@@ -76,6 +78,30 @@ def test_optimism_correction_reduces_auc():
     out = optimism_632plus_auc(X, y, list(X.columns), n_iter=50, seed=2)
     assert out["corrected_auc"] <= out["apparent_auc"] + 1e-9
     assert 0.0 <= out["weight_632plus"] <= 1.0 or out["weight_632plus"] >= 0.632
+
+
+def test_intervals_overlap():
+    assert intervals_overlap((0.4, 0.5), (0.45, 0.6)) is True
+    assert intervals_overlap((0.4, 0.5), (0.5, 0.6)) is True  # touching endpoints
+    assert intervals_overlap((0.4, 0.5), (0.55, 0.7)) is False
+
+
+def test_gini_stability_verdict_overlap_and_disjoint():
+    # Overlapping CIs → within sampling noise.
+    per_split = {
+        "train": {"gini": {"point": 0.50, "lower": 0.46, "upper": 0.54}},
+        "oot": {"gini": {"point": 0.47, "lower": 0.43, "upper": 0.51}},
+    }
+    v = gini_stability_verdict(per_split)
+    assert v["ci_overlap"] is True
+    assert "sampling noise" in v["verdict"]
+    assert v["point_drop"] == pytest.approx(0.03)
+
+    # Disjoint CIs → significant degradation.
+    per_split["oot"]["gini"] = {"point": 0.30, "lower": 0.25, "upper": 0.35}
+    v2 = gini_stability_verdict(per_split)
+    assert v2["ci_overlap"] is False
+    assert "significant" in v2["verdict"]
 
 
 def test_compute_discrimination_shapes(two_gaussians):

@@ -37,6 +37,7 @@ from creditscorecard.evaluation.calibration_checks import (
 )
 from creditscorecard.evaluation.discrimination import (
     compute_discrimination,
+    gini_stability_verdict,
     save_discrimination,
 )
 from creditscorecard.evaluation.explainability import (
@@ -46,7 +47,11 @@ from creditscorecard.evaluation.explainability import (
 )
 from creditscorecard.evaluation.fairness import run_fairness, save_fairness
 from creditscorecard.evaluation.metrics import metrics_table
-from creditscorecard.evaluation.stability import freeze_reference, herfindahl_hirschman_index
+from creditscorecard.evaluation.stability import (
+    freeze_reference,
+    herfindahl_hirschman_index,
+    split_psi,
+)
 from creditscorecard.features.binning import BinningModel
 from creditscorecard.features.selection import run_selection
 from creditscorecard.features.woe import WoETransformer
@@ -143,6 +148,12 @@ def run_pipeline(config: Config) -> PipelineResult:
     )
     save_discrimination(discrimination, config)
 
+    # --- split stability: PSI(test|train), PSI(oot|train) + train-vs-OOT Gini CI overlap ---
+    split_stability = {
+        "psi": split_psi(reference, {"test": scores["test"], "oot": scores["oot"]}, config),
+        "gini_train_vs_oot": gini_stability_verdict(discrimination.per_split),
+    }
+
     # --- §5.5 calibration backtest (Brier/ECE/HL + per-grade Jeffreys traffic light) ---
     calibration_bt = compute_calibration_backtest(
         probs["train"][0], probs["train"][1], train_grades, config
@@ -201,6 +212,7 @@ def run_pipeline(config: Config) -> PipelineResult:
         config, model, calibration, scorecard, woe, selection, reference, metrics, split, validation
     )
     payload["discrimination"] = discrimination.to_dict()
+    payload["split_stability"] = split_stability
     payload["calibration_backtest"] = calibration_bt.to_dict()
     payload["explainability"] = explain_result.to_dict()
     payload["benchmark"] = benchmark.to_dict() if benchmark is not None else {"enabled": False}

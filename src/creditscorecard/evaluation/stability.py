@@ -127,6 +127,32 @@ def characteristic_stability_index(
     return out
 
 
+def psi_status(value: float, warn: float, alert: float) -> str:
+    """Standard PSI banding: OK ≤ warn < WARN ≤ alert < ALERT."""
+    if value > alert:
+        return "ALERT"
+    if value > warn:
+        return "WARN"
+    return "OK"
+
+
+def split_psi(
+    ref: StabilityReference, scores_by_split: dict[str, np.ndarray], config: Config
+) -> dict[str, dict]:
+    """PSI of each development split's score distribution vs the frozen train reference.
+
+    Answers the validator's question "did the score distribution shift from train to
+    test/OOT?" — computed at development time (distinct from post-deployment monitoring on
+    new data). Reuses the frozen reference edges; the train split scores ~0 PSI by construction.
+    """
+    warn, alert = config.monitoring.psi_warn, config.monitoring.psi_alert
+    out: dict[str, dict] = {}
+    for name, scores in scores_by_split.items():
+        psi = population_stability_index(ref, np.asarray(scores, dtype=float))
+        out[name] = {"psi": psi, "status": psi_status(psi, warn, alert)}
+    return out
+
+
 def herfindahl_hirschman_index(labels: pd.Series | np.ndarray) -> float:
     """Portfolio concentration across rating grades/segments.
 

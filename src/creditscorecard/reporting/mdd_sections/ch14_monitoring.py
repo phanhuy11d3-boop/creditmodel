@@ -12,6 +12,19 @@ def render(ctx: MddContext) -> str:
     thr = p.get("monitoring_thresholds", {})
     ref = p.get("stability_reference", {})
     n_bins = len(ref.get("score_edges", [])) + 1 if ref else "?"
+
+    split_psi = p.get("split_stability", {}).get("psi", {})
+    psi_block = ""
+    if split_psi:
+        rows = "".join(
+            f"  - **{name} vs train:** PSI = {v['psi']:.4f} [{v['status']}]\n"
+            for name, v in split_psi.items()
+        )
+        psi_block = (
+            "- **Development-time score stability** (PSI of each split vs the frozen train "
+            "reference):\n" + rows
+        )
+
     return (
         f"## {NUMBER}. {TITLE}\n"
         f"- PSI/CSI use **frozen** development reference bins ({n_bins} score bins); new data "
@@ -23,4 +36,5 @@ def render(ctx: MddContext) -> str:
         "rows; `scorecard monitor-report` computes PSI/CSI **trend** (rising drift flagged before "
         "any single breach), per-grade **AvE** Jeffreys backtest, and score **migration** matrix.\n"
         "- Escalation: any metric ALERT, or a rising trend once the minimum period count is met.\n"
+        + psi_block
     )

@@ -45,6 +45,18 @@ def render(ctx: MddContext) -> str:
                 f"(optimism {opt.get('optimism', float('nan')):.4f}; "
                 f"OOB {opt.get('oob_auc', float('nan')):.4f}).\n"
             )
+
+    overlap = p.get("split_stability", {}).get("gini_train_vs_oot", {})
+    if overlap:
+        a = overlap["train_gini_ci"]
+        b = overlap["oot_gini_ci"]
+        flag = "✅ within sampling noise" if overlap["ci_overlap"] else "⚠️ significant drop"
+        parts.append(
+            "### Train → OOT Gini stability (CI overlap)\n"
+            f"- Train Gini CI [{a[0]:.4f}, {a[1]:.4f}] vs OOT CI [{b[0]:.4f}, {b[1]:.4f}] "
+            f"(point drop {overlap['point_drop']:+.4f}) — **{flag}**.\n"
+            f"- {overlap['verdict']}\n"
+        )
     parts.append("### Figures\n")
     for label in ("roc", "cap", "calibration", "score_distribution"):
         if label in ctx.figures:

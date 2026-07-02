@@ -103,6 +103,40 @@ def somers_d(y_true: np.ndarray | pd.Series, prob_bad: np.ndarray | pd.Series) -
     return 2.0 * auc(y_true, prob_bad) - 1.0
 
 
+def intervals_overlap(a: tuple[float, float], b: tuple[float, float]) -> bool:
+    """True if the two closed intervals overlap."""
+    return a[0] <= b[1] and b[0] <= a[1]
+
+
+def gini_stability_verdict(per_split: dict) -> dict:
+    """Compare train vs OOT Gini bootstrap CIs to judge whether the drop is significant.
+
+    Overlapping CIs ⇒ the train→OOT change is within sampling noise (no evidence of drift);
+    disjoint CIs ⇒ a statistically meaningful degradation on the out-of-time sample.
+    """
+    train = per_split.get("train", {}).get("gini")
+    oot = per_split.get("oot", {}).get("gini")
+    if not train or not oot:
+        return {}
+    a = (float(train["lower"]), float(train["upper"]))
+    b = (float(oot["lower"]), float(oot["upper"]))
+    overlap = intervals_overlap(a, b)
+    verdict = (
+        "Train and OOT Gini CIs overlap → the train→OOT drop is within sampling noise "
+        "(no evidence of drift)."
+        if overlap
+        else "Train and OOT Gini CIs are disjoint → statistically significant degradation on "
+        "OOT (possible drift; investigate / revalidate)."
+    )
+    return {
+        "train_gini_ci": [a[0], a[1]],
+        "oot_gini_ci": [b[0], b[1]],
+        "point_drop": float(train["point"]) - float(oot["point"]),
+        "ci_overlap": overlap,
+        "verdict": verdict,
+    }
+
+
 def lift_gains(
     y_true: np.ndarray | pd.Series, prob_bad: np.ndarray | pd.Series, n_bands: int = 10
 ) -> list[dict]:

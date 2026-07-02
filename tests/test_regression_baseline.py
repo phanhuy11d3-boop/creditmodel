@@ -48,6 +48,11 @@ def test_phase_b_payload_keys_present(tmp_path):
     assert sd["cohort_col"] == "origination_month"
     # Sample design is a no-op on the flat frame: no rows lost (diagnostic risk R1).
     assert sd["n_after_seasoning"] == sd["n_raw"]
+    # Split stability: PSI(test|train), PSI(oot|train) + train-vs-OOT Gini CI overlap verdict.
+    ss = payload["split_stability"]
+    assert {"test", "oot"} <= set(ss["psi"])
+    assert "status" in ss["psi"]["oot"]
+    assert "ci_overlap" in ss["gini_train_vs_oot"]
 
 
 def test_model_card_artifact_written(tmp_path):

@@ -34,6 +34,24 @@ def test_shift_increases_psi(reference):
     assert psi > 0.25  # a large shift should trip the ALERT band
 
 
+def test_psi_status_bands():
+    from creditscorecard.evaluation.stability import psi_status
+
+    assert psi_status(0.05, 0.10, 0.25) == "OK"
+    assert psi_status(0.15, 0.10, 0.25) == "WARN"
+    assert psi_status(0.30, 0.10, 0.25) == "ALERT"
+
+
+def test_split_psi_identical_and_shifted(reference, fitted):
+    from creditscorecard.evaluation.stability import split_psi
+
+    ref, scored, _ = reference
+    train_scores = scored["total_score"].to_numpy()
+    out = split_psi(ref, {"same": train_scores, "shifted": train_scores + 80}, fitted.config)
+    assert out["same"]["psi"] < 1e-6 and out["same"]["status"] == "OK"
+    assert out["shifted"]["status"] == "ALERT"
+
+
 def test_frozen_edges_not_recomputed_on_new_data(reference, monkeypatch):
     """PSI on new data must NOT call quantile/qcut (edges are frozen)."""
     ref, scored, _ = reference

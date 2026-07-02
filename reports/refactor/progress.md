@@ -231,3 +231,19 @@ document filename preserved).
 
 ### Commit
 - Phase G: `779a046` (progress-hash note in this commit).
+
+---
+
+## Post-G enhancement — development-time split stability (PSI + Gini CI overlap)
+
+Requested after Phase G. Complements the Phase-C discrimination CIs so the train→OOT change
+can be judged, not just reported:
+- **PSI(test|train)** and **PSI(oot|train)** computed at development time against the frozen
+  train reference (`split_psi` in `stability.py`), with OK/WARN/ALERT status → `model.json`
+  `split_stability.psi` and MDD ch14.
+- **Train-vs-OOT Gini CI overlap verdict** (`gini_stability_verdict` in `discrimination.py`):
+  overlapping CIs ⇒ drop within sampling noise; disjoint ⇒ significant degradation / possible
+  drift → `model.json` `split_stability.gini_train_vs_oot` and MDD ch10.
+- Tests added to `test_stability_psi.py`, `test_discrimination_ci.py`,
+  `test_regression_baseline.py`. Deterministic (values from scores/CIs; model version stays
+  reproducible).
