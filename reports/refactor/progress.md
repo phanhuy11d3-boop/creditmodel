@@ -230,4 +230,4 @@ document filename preserved).
 14. ⚠️ CI defined and green locally; Docker build deferred (known_gaps #1).
 
 ### Commit
-- Phase G: `b9649ce`.
+- Phase G: `779a046` (progress-hash note in this commit).
