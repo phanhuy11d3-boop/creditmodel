@@ -73,3 +73,27 @@ def test_api_missing_feature_returns_422(client):
     tc, _ = client
     resp = tc.post("/score", json={"features": {"not_a_real_feature": 1}})
     assert resp.status_code == 422
+
+
+def test_api_explain_returns_shap_and_parity(client, dataset):
+    tc, model = client
+    row = _records(dataset, model.selected_features, 1)[0]
+    resp = tc.post("/explain", json={"features": row, "top_k_reasons": 4})
+    assert resp.status_code == 200
+    data = resp.json()
+    # /explain returns everything /score does, plus SHAP-based reasons + parity.
+    assert data["score"] == model.score_one(row)["score"]
+    assert len(data["reason_codes"]) >= 1
+    assert len(data["shap_reasons"]) >= 1
+    assert {"feature", "shap", "direction"} <= set(data["shap_reasons"][0])
+    assert 0.0 <= data["points_vs_shap_agreement"] <= 1.0
+
+
+def test_explain_matches_native_scoring(client, dataset):
+    tc, model = client
+    row = _records(dataset, model.selected_features, 1)[0]
+    api_expl = tc.post("/explain", json={"features": row}).json()
+    native = model.explain_one(row)
+    assert [r["feature"] for r in api_expl["shap_reasons"]] == [
+        r["feature"] for r in native["shap_reasons"]
+    ]

@@ -93,6 +93,20 @@ def score(request: ScoreRequest) -> dict[str, Any]:
     return _score_applicant(model, request.features, request.top_k_reasons)
 
 
+@app.post("/explain")
+def explain(request: ScoreRequest) -> dict[str, Any]:
+    """Score + points reason codes + SHAP-based rationale + points/SHAP parity (§5.8)."""
+    model = get_model()
+    applicant, top_k = request.features, request.top_k_reasons
+    missing = [f for f in model.selected_features if f not in applicant]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Missing required features: {missing}")
+    try:
+        return model.explain_one(applicant, top_n=top_k)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/batch-score")
 def batch_score(request: BatchScoreRequest) -> dict[str, Any]:
     model = get_model()

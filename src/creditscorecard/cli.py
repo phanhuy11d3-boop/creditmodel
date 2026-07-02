@@ -29,6 +29,9 @@ def run(
     cfg = load_config(config)
     result = run_pipeline(cfg)
     typer.echo("\nPerformance:\n" + result.metrics.to_string(index=False))
+    bm = result.payload.get("benchmark", {})
+    if bm.get("under_specified"):
+        typer.secho("\n⚠️  " + bm.get("verdict", "Challenger beats reportable model."), fg="yellow")
     typer.echo(f"\nArtifacts: {result.artifacts_path}")
     typer.echo(f"MDD:       {result.mdd_paths['html']}")
     typer.echo(f"Version:   {result.payload['version']}")

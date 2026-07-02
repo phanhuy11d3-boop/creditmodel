@@ -17,7 +17,9 @@ def _offline_cfg(tmp_path) -> Config:
     cfg.paths.artifacts_dir = str(tmp_path / "artifacts")
     cfg.paths.reports_dir = str(tmp_path / "reports")
     cfg.paths.data_dir = str(tmp_path / "data")
-    cfg.discrimination.bootstrap_iterations = 120  # fast + deterministic (risk R3/R6)
+    cfg.discrimination.bootstrap_iterations = 100  # fast + deterministic (risk R3/R6)
+    cfg.explainability.shap_sample_size = 60
+    cfg.benchmark.challenger_params = {"n_estimators": 50, "max_depth": 3, "learning_rate": 0.1}
     return cfg
 
 

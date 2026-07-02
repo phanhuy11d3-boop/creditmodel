@@ -234,6 +234,9 @@ def _build_markdown(payload, tables, figures) -> str:  # noqa: PLR0915
 
     parts.append(_discrimination_md(payload.get("discrimination", {})))
     parts.append(_calibration_backtest_md(payload.get("calibration_backtest", {})))
+    parts.append(_benchmark_md(payload.get("benchmark", {})))
+    parts.append(_explainability_md(payload.get("explainability", {})))
+    parts.append(_reject_inference_md(payload.get("reject_inference", {})))
 
     parts.append("## 9. Validation Summary\n")
     parts.append(_validation_summary_md(payload.get("validation_summary", {})))
@@ -328,6 +331,83 @@ def _calibration_backtest_md(cb: dict[str, Any]) -> str:
         "- Traffic light per grade uses the binomial default count under the forecast PD "
         "(EBA IRB Validation Handbook 2023): green < green-quantile, yellow up to "
         "yellow-quantile, red above.\n"
+    )
+    return "".join(parts)
+
+
+def _benchmark_md(bm: dict[str, Any]) -> str:
+    """§5.4 — champion vs challenger: Gini±CI, DeLong, interpretability parity, verdict."""
+    if not bm or bm.get("enabled") is False:
+        return "## 11. Champion vs Challenger (§5.4)\n\n*Benchmark disabled.*\n"
+    parts = ["## 11. Champion vs Challenger (§5.4)\n"]
+    rep = bm.get("reportable_gini_oot", {})
+    chal = bm.get("challenger_gini_oot", {})
+    dl = bm.get("delong", {})
+    parts.append(
+        f"- **Challenger:** {bm.get('challenger')}\n"
+        f"- **OOT Gini** — reportable {_ci(rep) if rep else 'n/a'} · "
+        f"challenger {_ci(chal) if chal else 'n/a'}\n"
+    )
+    if dl:
+        parts.append(
+            f"- **DeLong test** (AUC challenger vs reportable): z={dl.get('z', float('nan')):.3f}, "
+            f"p={dl.get('pvalue', float('nan')):.4f}\n"
+        )
+    parity = bm.get("interpretability_parity", {})
+    if parity:
+        parts.append(
+            f"- **Interpretability parity** (top-{parity.get('top_k')}): "
+            f"Jaccard={parity.get('jaccard', float('nan')):.3f}; "
+            f"reportable {parity.get('reportable_top')}, "
+            f"challenger {parity.get('challenger_top')}\n"
+        )
+    flag = "⚠️ **UNDER-SPECIFIED**" if bm.get("under_specified") else "✅ adequate"
+    parts.append(f"- **Verdict:** {flag} — {bm.get('verdict', '')}\n")
+    return "".join(parts)
+
+
+def _explainability_md(ex: dict[str, Any]) -> str:
+    """§5.8 — global importance (reportable + challenger) and interpretability parity."""
+    if not ex:
+        return ""
+    parts = ["## 13. Explainability (§5.8)\n"]
+    parts.append(f"- **Method:** {ex.get('method')}\n")
+    rep = ex.get("reportable_importance", {})
+    if rep:
+        top = sorted(rep.items(), key=lambda kv: kv[1], reverse=True)[:10]
+        tbl = pd.DataFrame([{"feature": f, "mean_abs_shap": round(v, 4)} for f, v in top])
+        parts.append("### Reportable model — global importance (mean |linear SHAP|)\n")
+        parts.append(df_to_md(tbl) + "\n")
+    parts.append("- SHAP beeswarm / importance figure: `../figures/shap_summary.png`.\n")
+    return "".join(parts)
+
+
+def _reject_inference_md(ri: dict[str, Any]) -> str:
+    """§5.2 — reject inference method, sensitivity, or KGB limitation if disabled."""
+    parts = ["## 3. Reject Inference (§5.2)\n"]
+    if not ri or ri.get("enabled") is False or "methods" not in ri:
+        parts.append(
+            "*Reject inference is **disabled** (no reject data). The development sample is "
+            "Known-Good-Bad (KGB) only; through-the-door population selection bias is "
+            "uncorrected — see the limitations register in the model card.*\n"
+        )
+        return "".join(parts)
+    rows = []
+    for name, m in ri.get("methods", {}).items():
+        rows.append(
+            {
+                "method": name,
+                "coef_shift_L2": round(m.get("coef_shift_l2", float("nan")), 4),
+                "gini_kgb": round(m.get("gini_kgb", float("nan")), 4),
+                "gini_method": round(m.get("gini_method", float("nan")), 4),
+                "gini_shift": round(m.get("gini_shift", float("nan")), 4),
+            }
+        )
+    parts.append(df_to_md(pd.DataFrame(rows)) + "\n")
+    parts.append(
+        "- Sensitivity is reported across methods (Banasik & Crook; Bücker et al.): the "
+        "simpler methods often match complex ones — no single method is presented as "
+        "definitive.\n"
     )
     return "".join(parts)
 

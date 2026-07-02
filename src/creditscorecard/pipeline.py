@@ -24,6 +24,7 @@ from creditscorecard.data.definition_of_default import save_sample_design
 from creditscorecard.data.schema import validate_dataframe
 from creditscorecard.data.split import SplitData, split_data
 from creditscorecard.evaluation import curves
+from creditscorecard.evaluation.benchmark import fit_challenger, run_benchmark, save_benchmark
 from creditscorecard.evaluation.calibration import (
     compute_calibration_backtest,
     plot_reliability_curve,
@@ -37,6 +38,11 @@ from creditscorecard.evaluation.calibration_checks import (
 from creditscorecard.evaluation.discrimination import (
     compute_discrimination,
     save_discrimination,
+)
+from creditscorecard.evaluation.explainability import (
+    compute_explainability,
+    plot_shap_summary,
+    save_global_importance,
 )
 from creditscorecard.evaluation.metrics import metrics_table
 from creditscorecard.evaluation.stability import freeze_reference, herfindahl_hirschman_index
@@ -142,6 +148,36 @@ def run_pipeline(config: Config) -> PipelineResult:
     )
     save_calibration_backtest(calibration_bt, config)
 
+    # --- §5.4 champion vs challenger + §5.8 explainability ---
+    woe_cols = model.woe_columns
+    Xoot_woe = woe.transform(split.oot[feat_cols])
+    challenger = (
+        fit_challenger(Xtr_woe[woe_cols], ytr, config) if config.benchmark.enabled else None
+    )
+    explain_result, shap_matrix, shap_X = compute_explainability(
+        model.coefficients,
+        Xtr_woe,
+        model.features,
+        config,
+        challenger=challenger,
+        X_challenger=Xtr_woe[woe_cols] if challenger is not None else None,
+    )
+    save_global_importance(explain_result, config)
+    benchmark = None
+    if challenger is not None:
+        challenger_p_oot = challenger.predict_proba(Xoot_woe[woe_cols])[:, 1]
+        benchmark = run_benchmark(
+            probs["oot"][0],
+            probs["oot"][1],
+            challenger_p_oot,
+            config,
+            interpretability_parity=explain_result.interpretability_parity,
+        )
+        save_benchmark(benchmark, config)
+
+    # --- §5.2 reject inference (only when enabled and reject data is supplied) ---
+    reject_result = _maybe_reject_inference(config, woe, model, Xtr_woe, ytr)
+
     # --- figures ---
     fig_dir = config.reports_path() / "figures"
     y_test, p_test = probs["test"]
@@ -153,6 +189,7 @@ def run_pipeline(config: Config) -> PipelineResult:
             curves.plot_score_distribution(scores["train"], probs["train"][0], fig_dir)
         ),
         "reliability_curve": str(plot_reliability_curve(calibration_bt, fig_dir)),
+        "shap_summary": str(plot_shap_summary(explain_result, fig_dir, shap_matrix, shap_X)),
     }
 
     # --- payload / artifacts ---
@@ -161,6 +198,18 @@ def run_pipeline(config: Config) -> PipelineResult:
     )
     payload["discrimination"] = discrimination.to_dict()
     payload["calibration_backtest"] = calibration_bt.to_dict()
+    payload["explainability"] = explain_result.to_dict()
+    payload["benchmark"] = benchmark.to_dict() if benchmark is not None else {"enabled": False}
+    payload["reject_inference"] = (
+        reject_result.to_dict()
+        if reject_result is not None
+        else {"enabled": config.reject_inference.enabled}
+    )
+    # Reference WoE means enable exact native linear-SHAP explanations at serve time
+    # (the /explain endpoint) without a SHAP dependency in the serving container.
+    payload["woe_means"] = {
+        f: float(Xtr_woe[woe_cols[i]].mean()) for i, f in enumerate(model.features)
+    }
     tables = _build_tables(woe, selection, scorecard, metrics, model.features)
     artifacts_path = save_artifacts(payload, config, tables)
 
@@ -261,6 +310,31 @@ def _build_payload(
         },
         "validation_summary": validation,
     }
+
+
+def _maybe_reject_inference(config: Config, woe, model, Xtr_woe, ytr):
+    """Run reject inference when enabled + reject data is supplied; else skip (KGB).
+
+    The reject file is transformed with the FROZEN binning/WoE (no refit), then the three
+    §5.2 methods are compared against the KGB baseline. When disabled, the KGB
+    sample-selection-bias limitation is already recorded by the governance module.
+    """
+    ri = config.reject_inference
+    if not ri.enabled or not ri.reject_data_path:
+        logger.info("Reject inference disabled; KGB-only sample (limitation logged in model card).")
+        return None
+    from creditscorecard.data.reject_inference import (
+        run_reject_inference,
+        save_reject_inference_sensitivity,
+    )
+
+    reject_path = config._resolve(ri.reject_data_path)
+    rejects_raw = pd.read_csv(reject_path)
+    woe_cols = model.woe_columns
+    rejects_woe = woe.transform(rejects_raw[model.features])[woe_cols]
+    result = run_reject_inference(Xtr_woe[woe_cols], ytr, rejects_woe, config, methods=[ri.method])
+    save_reject_inference_sensitivity(result, config)
+    return result
 
 
 def binning_spec(woe: WoETransformer, feature: str) -> dict:

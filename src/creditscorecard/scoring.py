@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from creditscorecard.config import Config
+from creditscorecard.evaluation.explainability import explain_applicant, points_vs_shap_agreement
 from creditscorecard.features.binning import FeatureBinning, assign_codes
 from creditscorecard.model.scorecard import MasterScale, ScorecardModel
 from creditscorecard.reasons import ReasonCode, compute_reasons
@@ -40,6 +41,14 @@ class ScoringModel:
         self.points_card: dict[str, dict[int, float]] = {
             f: {int(k): float(v) for k, v in card.items()}
             for f, card in payload["points_card"].items()
+        }
+        # Reportable-model coefficients + reference WoE means for exact linear-SHAP
+        # explanations (§5.8); default to neutral means for legacy artifacts.
+        self.coefficients: dict[str, float] = {
+            f: float(v) for f, v in payload.get("model", {}).get("coefficients", {}).items()
+        }
+        self.woe_means: dict[str, float] = {
+            f: float(payload.get("woe_means", {}).get(f, 0.0)) for f in self.selected_features
         }
         sc = payload["scaling"]
         ms = payload["master_scale"]
@@ -91,6 +100,23 @@ class ScoringModel:
             "rating_grade": str(scored["rating_grade"].iloc[0]),
             "points_breakdown": {f: round(v, 2) for f, v in feature_points.items()},
             "reason_codes": [r.to_dict() for r in reasons],
+        }
+
+    def explain_one(self, applicant: dict[str, Any], top_n: int = 4) -> dict[str, Any]:
+        """Score + points reason codes + exact linear-SHAP reasons + parity (§5.8)."""
+        base = self.score_one(applicant, top_k=top_n)
+        codes = self.codes_frame(pd.DataFrame([applicant]))
+        woe_values = {
+            f: float(self.woe_maps[f].get(int(codes[f].iloc[0]), 0.0))
+            for f in self.selected_features
+        }
+        shap_reasons = explain_applicant(self.coefficients, woe_values, self.woe_means, top_n=top_n)
+        points_feats = [r["feature"] for r in base["reason_codes"]]
+        shap_feats = [r["feature"] for r in shap_reasons]
+        return {
+            **base,
+            "shap_reasons": shap_reasons,
+            "points_vs_shap_agreement": points_vs_shap_agreement(points_feats, shap_feats),
         }
 
     def model_info(self) -> dict[str, Any]:

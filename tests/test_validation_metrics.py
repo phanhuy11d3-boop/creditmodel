@@ -109,3 +109,21 @@ def test_monitor_report_includes_hhi(config, pipeline_payload, dataset):
     report = run_monitoring(config, dataset.copy())
     assert 0.0 <= report.hhi <= 1.0
     assert report.hhi_status in {"OK", "ALERT"}
+
+
+def test_anchor_gap_zero_when_anchor_is_zero():
+    assert anchor_gap(0.05, 0.0) == 0.0
+
+
+def test_curve_shape_to_dict_and_zero_se_grade():
+    # Grades are ordered worst→best with PD non-increasing; the last grade has avg_pd == 0
+    # (zero binomial SE → within-band decided by np.isclose). Empty grades are skipped.
+    table = [
+        {"grade": "A", "count": 100, "avg_pd": 0.20, "observed_bad_rate": 0.20},
+        {"grade": "C", "count": 0, "avg_pd": float("nan"), "observed_bad_rate": float("nan")},
+        {"grade": "B", "count": 100, "avg_pd": 0.0, "observed_bad_rate": 0.0},
+    ]
+    result = curve_shape_check(table, n_se=2.0)
+    assert result.all_within_band  # zero-SE grade matches exactly, others within band
+    d = result.to_dict()
+    assert "bands" in d and d["monotonic"] is True

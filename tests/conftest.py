@@ -30,10 +30,11 @@ def config(tmp_path_factory: pytest.TempPathFactory) -> Config:
     cfg.data.adapter = "synthetic"
     cfg.data.target = "default"  # the synthetic fallback frame always uses this column
     cfg.data.date_column = "application_date"
-    # Keep bootstrap/SHAP work small so the suite stays fast (diagnostic risk R3);
-    # correctness of the CI machinery is pinned by its own dedicated unit tests.
-    cfg.discrimination.bootstrap_iterations = 150
-    cfg.explainability.shap_sample_size = 100
+    # Keep bootstrap/SHAP/challenger work small so the suite stays fast (diagnostic risk R3);
+    # correctness of the CI/benchmark machinery is pinned by its own dedicated unit tests.
+    cfg.discrimination.bootstrap_iterations = 120
+    cfg.explainability.shap_sample_size = 80
+    cfg.benchmark.challenger_params = {"n_estimators": 60, "max_depth": 3, "learning_rate": 0.1}
     tmp = tmp_path_factory.mktemp("run")
     cfg.paths.artifacts_dir = str(tmp / "artifacts")
     cfg.paths.reports_dir = str(tmp / "reports")

@@ -92,9 +92,50 @@ percentile/basic; seeded determinism; optimism ≤ apparent) and `test_calibrati
 iteration counts in the test configs. Will revisit if it grows further.
 
 ### Commit
-- Phase C: `<pending>`.
+- Phase C: `865cf97`.
 
-## Phase D — Validation upgrade ⏳
+## Phase D — Validation upgrade ✅ (complete)
+
+Reject inference (§5.2) → champion vs challenger (§5.4) → explainability (§5.8) → MDD ch 3, 11, 13.
+Closes gaps #2 (reject inference), #3 (benchmark), #8 (explainability).
+
+**Delivered:**
+- **`data/reject_inference.py` (§5.2):** parceling, reweighting, fuzzy augmentation on the WoE
+  design; `reject_inference_sensitivity.json` (coef + Gini shift vs KGB). Off by default;
+  pipeline runs it only when `enabled` + reject data supplied (frozen WoE transform, no refit).
+- **`evaluation/benchmark.py` (§5.4):** GBM/RF/xgboost challenger, **DeLong test** (fast
+  Sun & Xu 2014) for correlated AUCs, OOT Gini±CI for both models, under-specified verdict
+  (gap > 0.03 AND DeLong p < 0.05) surfaced in MDD + CLI. `benchmark.json`.
+- **`evaluation/explainability.py` (§5.8):** exact native **linear SHAP** for the reportable
+  model (β·(woe−E[woe]), no dependency at serve time) + `shap.TreeExplainer` for the challenger
+  (impurity fallback if shap absent — risk R4). Interpretability parity (Jaccard top-K).
+  `global_importance.json` + `shap_summary.png`. Added `shap==0.51` dependency.
+- **Serving:** `POST /explain` returns points reasons + SHAP reasons + points/SHAP agreement;
+  `woe_means` persisted so the endpoint needs no SHAP library.
+- **MDD:** sections 3 (reject inference / KGB), 11 (champion-challenger + DeLong verdict),
+  13 (explainability + parity).
+
+**Tests:** `test_reject_inference.py` (parceling recovers the population intercept far closer
+than KGB under outcome-correlated selection — the real RI effect, confirmed empirically),
+`test_benchmark_delong.py` (DeLong detects a real difference, null z≈0; challenger beats a
+linear model on an XOR interaction → under-specified verdict), `test_explainability_parity.py`
+(exact linear SHAP, additivity, direction, agreement), plus `/explain` API parity tests.
+
+**Finding worth recording:** KGB slope coefficients are *consistent* even under strong
+selection — selection on the outcome shifts only the intercept/base rate. So reject inference's
+robust, demonstrable win is base-rate/intercept recovery, matching the Banasik & Crook
+literature the module cites. Tests assert that (not a slope-recovery claim that theory doesn't
+support).
+
+- Full suite green: **132 passed**; ruff + format + mypy clean.
+- Coverage: **95% overall**; all domain modules ≥95% (reject_inference 99%, benchmark 99%,
+  explainability 96%, discrimination 95%, calibration 97%, calibration_checks 100%).
+- Runtime ~4 min (challenger fit + SHAP); trimmed challenger `n_estimators`/`shap_sample_size`
+  in test configs to hold the line (risk R3).
+
+### Commit
+- Phase D: `<pending>`.
+
 ## Phase E — Fairness & Monitoring ⏳
 ## Phase F — Governance & MDD finalisation ⏳
 ## Phase G — Green everything ⏳
