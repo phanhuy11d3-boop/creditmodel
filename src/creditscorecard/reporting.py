@@ -237,6 +237,7 @@ def _build_markdown(payload, tables, figures) -> str:  # noqa: PLR0915
     parts.append(_benchmark_md(payload.get("benchmark", {})))
     parts.append(_explainability_md(payload.get("explainability", {})))
     parts.append(_reject_inference_md(payload.get("reject_inference", {})))
+    parts.append(_fairness_md(payload.get("fairness", {})))
 
     parts.append("## 9. Validation Summary\n")
     parts.append(_validation_summary_md(payload.get("validation_summary", {})))
@@ -409,6 +410,42 @@ def _reject_inference_md(ri: dict[str, Any]) -> str:
         "simpler methods often match complex ones — no single method is presented as "
         "definitive.\n"
     )
+    return "".join(parts)
+
+
+def _fairness_md(fair: dict[str, Any]) -> str:
+    """§5.6 — AIR / SMD / SPD / EOD per protected attribute + proxy scan + verdict."""
+    parts = ["## 12. Fairness — Disparate Impact (§5.6)\n"]
+    if not fair or not fair.get("enabled") or not fair.get("attributes"):
+        parts.append(
+            "*Fairness N/A: no protected attributes configured/present. ECOA/Reg B "
+            "disparate-impact testing should be run whenever a protected attribute is "
+            "available (see limitations register).*\n"
+        )
+        return "".join(parts)
+    rows = []
+    for a in fair["attributes"]:
+        rows.append(
+            {
+                "attribute": a["attribute"],
+                "AIR": round(a["adverse_impact_ratio"], 3),
+                "SMD": round(a["standardized_mean_difference"], 3),
+                "SPD": round(a["statistical_parity_difference"], 3),
+                "EOD": round(a["equal_opportunity_difference"], 3),
+                "status": a["air_status"],
+            }
+        )
+    parts.append(df_to_md(pd.DataFrame(rows)) + "\n")
+    parts.append(
+        "- AIR < 0.80 breaches the **80% rule** (ECOA/Reg B). "
+        f"{'Failure acknowledged in config.' if fair.get('acknowledged_failure') else ''}\n"
+    )
+    for attr, scan in (fair.get("proxies") or {}).items():
+        flagged = [s["feature"] for s in scan if s["flagged"]]
+        if flagged:
+            parts.append(f"- **Proxy scan ({attr})**: flagged {flagged}\n")
+    if fair.get("note"):
+        parts.append(f"- {fair['note']}\n")
     return "".join(parts)
 
 

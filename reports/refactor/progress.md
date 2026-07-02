@@ -136,6 +136,36 @@ support).
 ### Commit
 - Phase D: `<pending>`.
 
-## Phase E — Fairness & Monitoring ⏳
+## Phase E — Fairness & Monitoring ✅ (complete)
+
+Fairness (§5.6) → multi-period monitoring (§5.7) → MDD ch 12, 14.
+Closes gaps #6 (single-snapshot monitoring) and #7 (no fairness testing).
+
+**Delivered:**
+- **`evaluation/fairness.py` (§5.6):** AIR (80% rule), SMD, SPD, EOD per protected attribute
+  + mutual-information proxy scan. Numeric protected attrs dichotomised (age at 25), categorical
+  by minority level. **Build-failing** on AIR < alert unless `acknowledge_failure`. `fairness.json`.
+- **`monitoring/runlog.py` (§5.7):** SQLite/JSONL append-only run-log; PSI/CSI **trend** (OLS
+  slope over periods flags rising drift before any single breach); **AvE backtest** per grade
+  (Jeffreys traffic light); **score migration matrix** (off-diagonal mass).
+- **`monitoring/monitor.py`:** `run_monitoring(..., period_id=)` appends to the run-log;
+  new `run_monitoring_report` writes `monitoring_trend_report.json`.
+- **CLI:** `monitor --period-id`; new `monitor-report` command.
+- **Pipeline:** fairness computed on the full scored population (favourable = score ≥ median);
+  `configs/german_credit.yaml` acknowledges the age-AIR breach (demo data, R5).
+- **MDD:** section 12 (fairness + proxy scan + verdict); monitoring plan (14) covered by §10 +
+  run-log location/cadence.
+
+**Tests:** `test_fairness.py` (AIR flags planted disparate impact; proxy scan identifies the
+planted proxy; build-fails when unacknowledged; masks) and `test_monitoring_runlog.py`
+(sqlite+jsonl store; three-period rising trend flagged though each period is under alert; AvE
+red on a miscalibrated grade; migration off-diagonal).
+
+- Full suite green (145 passed); ruff + format + mypy clean. fairness 97%, monitor 100%,
+  runlog 97%; TOTAL 94% (≥85% gate; monitoring/ is outside the ≥95% domain list).
+
+### Commit
+- Phase E: `<pending>`.
+
 ## Phase F — Governance & MDD finalisation ⏳
 ## Phase G — Green everything ⏳

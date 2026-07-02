@@ -69,20 +69,41 @@ def evaluate(config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c")) -> No
 def monitor(
     config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c"),
     new_data: str = typer.Option(..., "--new-data", help="CSV of new applicants."),
+    period_id: str = typer.Option(
+        None, "--period-id", help="Period label (e.g. 2025-Q1); writes to the run-log."
+    ),
 ) -> None:
-    """Compute PSI/CSI of new data vs the frozen reference."""
+    """Compute PSI/CSI of new data vs the frozen reference (optionally log the period)."""
     configure_logging()
     from creditscorecard.monitoring.monitor import run_monitoring
 
     cfg = load_config(config)
-    report = run_monitoring(cfg, new_data)
+    report = run_monitoring(cfg, new_data, period_id=period_id)
     typer.echo(f"Model version: {report.version}  ·  n={report.n_new}")
     typer.echo(f"Score PSI: {report.psi:.4f}  [{report.psi_status}]")
     typer.echo(f"Grade HHI: {report.hhi:.4f}  [{report.hhi_status}]")
     typer.echo("CSI by characteristic:")
     for feat, val in sorted(report.csi.items(), key=lambda kv: kv[1], reverse=True):
         typer.echo(f"  {feat:<28} {val:.4f}  [{report.csi_status[feat]}]")
+    if period_id:
+        typer.echo(f"\nLogged to run-log under period '{period_id}'.")
     typer.echo(f"\nEscalate: {report.escalate}")
+
+
+@app.command(name="monitor-report")
+def monitor_report(config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c")) -> None:
+    """Read the multi-period run-log and produce a PSI/CSI trend report (§5.7)."""
+    configure_logging()
+    from creditscorecard.monitoring.monitor import run_monitoring_report
+
+    cfg = load_config(config)
+    report = run_monitoring_report(cfg)
+    typer.echo(f"Periods logged: {report['n_periods']}")
+    if report["rising_trends"]:
+        typer.secho(f"Rising trends: {report['rising_trends']}", fg="yellow")
+    for metric, tr in sorted(report["trends"].items()):
+        typer.echo(f"  {metric:<28} slope={tr['slope']:+.4f}  latest={tr['latest_value']:.4f}")
+    typer.echo(f"\nEscalate: {report['escalate']}")
 
 
 @app.command()

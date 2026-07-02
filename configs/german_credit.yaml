@@ -31,6 +31,9 @@ fairness:
   protected_attributes:
     - age_years
     - foreign_worker
+  # Demo dataset: we cannot remediate the underlying data, so an AIR breach is acknowledged
+  # (still reported with full metrics + verdict) rather than hard-failing the build (§5.6, R5).
+  acknowledge_failure: true
 
 governance:
   model_id: PD-APP-GC-001

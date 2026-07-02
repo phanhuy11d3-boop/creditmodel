@@ -44,6 +44,7 @@ from creditscorecard.evaluation.explainability import (
     plot_shap_summary,
     save_global_importance,
 )
+from creditscorecard.evaluation.fairness import run_fairness, save_fairness
 from creditscorecard.evaluation.metrics import metrics_table
 from creditscorecard.evaluation.stability import freeze_reference, herfindahl_hirschman_index
 from creditscorecard.features.binning import BinningModel
@@ -178,6 +179,9 @@ def run_pipeline(config: Config) -> PipelineResult:
     # --- §5.2 reject inference (only when enabled and reject data is supplied) ---
     reject_result = _maybe_reject_inference(config, woe, model, Xtr_woe, ytr)
 
+    # --- §5.6 fairness / disparate-impact (only if protected attributes present) ---
+    fairness_result = _maybe_fairness(config, df, feat_cols, binning, woe, model, scorecard)
+
     # --- figures ---
     fig_dir = config.reports_path() / "figures"
     y_test, p_test = probs["test"]
@@ -210,6 +214,11 @@ def run_pipeline(config: Config) -> PipelineResult:
     payload["woe_means"] = {
         f: float(Xtr_woe[woe_cols[i]].mean()) for i, f in enumerate(model.features)
     }
+    payload["fairness"] = (
+        fairness_result.to_dict()
+        if fairness_result is not None
+        else {"enabled": config.fairness.enabled}
+    )
     tables = _build_tables(woe, selection, scorecard, metrics, model.features)
     artifacts_path = save_artifacts(payload, config, tables)
 
@@ -334,6 +343,36 @@ def _maybe_reject_inference(config: Config, woe, model, Xtr_woe, ytr):
     rejects_woe = woe.transform(rejects_raw[model.features])[woe_cols]
     result = run_reject_inference(Xtr_woe[woe_cols], ytr, rejects_woe, config, methods=[ri.method])
     save_reject_inference_sensitivity(result, config)
+    return result
+
+
+def _maybe_fairness(config: Config, df, feat_cols, binning, woe, model, scorecard):
+    """Run fairness testing on the full scored population when protected attrs are present.
+
+    The favourable outcome is 'approved' = score at/above the median (a 50% approval rate);
+    proxy scan uses the selected WoE features. May raise ``FairnessBuildError`` if AIR breaks
+    the 80% rule and the failure is not acknowledged (diagnostic risk R5).
+    """
+    f = config.fairness
+    present = [a for a in f.protected_attributes if a in df.columns]
+    if not f.enabled or not present:
+        logger.info("Fairness skipped: disabled or no protected attributes in data.")
+        return None
+    target = config.data.target
+    codes = binning.transform(df[feat_cols])[model.features]
+    scored = scorecard.score_codes(codes)
+    scores = scored["total_score"].to_numpy(dtype=float)
+    favourable = scores >= float(np.median(scores))  # approve the better-scoring half
+    feature_frame = woe.transform(df[feat_cols])[model.woe_columns]
+    result = run_fairness(
+        df,
+        favourable,
+        scores,
+        config,
+        y_true=df[target].to_numpy(),
+        feature_frame=feature_frame,
+    )
+    save_fairness(result, config)
     return result
 
 
