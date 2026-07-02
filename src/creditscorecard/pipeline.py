@@ -233,7 +233,7 @@ def run_pipeline(config: Config) -> PipelineResult:
     # --- MDD (imported lazily to avoid a cycle) ---
     from creditscorecard.reporting import generate_mdd
 
-    mdd_paths = generate_mdd(payload, tables, figures, config)
+    mdd_paths = generate_mdd(payload, tables, figures, config, model_card=card.to_dict())
 
     logger.info("=== Pipeline complete (version=%s) ===", payload["version"])
     return PipelineResult(

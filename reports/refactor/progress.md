@@ -165,7 +165,38 @@ red on a miscalibrated grade; migration off-diagonal).
   runlog 97%; TOTAL 94% (≥85% gate; monitoring/ is outside the ≥95% domain list).
 
 ### Commit
-- Phase E: `<pending>`.
+- Phase E: `cfba152`.
 
-## Phase F — Governance & MDD finalisation ⏳
+## Phase F — Governance & MDD finalisation ✅ (complete)
+
+Full assumptions/limitations register wired → MDD restructured into a per-chapter package →
+deterministic single-command regeneration → README updated.
+
+**Delivered:**
+- **`reporting/` package** replacing the single `reporting.py`: one module per MDD chapter
+  under `mdd_sections/` (**16 chapters**, §6), an `MddContext` built purely from serialized
+  artifacts, an orchestrator writing per-chapter `.md`/`.html` + `index.html` + a combined
+  document.
+- **Deterministic (DoD §9.10):** removed `datetime.now()` from the MDD; the provenance line
+  uses the payload's frozen `created_at`/`version`. **Regeneration is byte-identical** (test).
+- **Limitations & assumptions register (ch 15)** sourced from `model_card.json` (KGB entry
+  auto-appears when reject inference is disabled).
+- **`scorecard report`** CLI regenerates the MDD from artifacts with no retraining
+  (`regenerate_mdd` via `load_context`).
+- **README** updated: pipeline diagram, artifacts table, all CLI commands, `/explain`, the
+  full config block table, and the new architecture tree.
+
+**Tests:** `test_reporting_mdd.py` (16 chapters registered 1..16; all chapter files written;
+byte-identical regeneration; KGB entry in ch15). `test_pipeline_e2e` still green (combined
+document filename preserved).
+
+- Full suite green: **149 passed**; ruff + format + mypy clean.
+- Coverage: **TOTAL 95%**; features/ 95.8%, all evaluation modules ≥95%, DoD 97%, reject 99%
+  (all §7 domain gates met). Reporting chapters are outside the ≥95% list (overall ≥85% applies).
+- Runtime ~7 min (challenger+SHAP+bootstrap across several full pipeline runs) — flagged for
+  Phase G trimming (risk R3).
+
+### Commit
+- Phase F: `<pending>`.
+
 ## Phase G — Green everything ⏳

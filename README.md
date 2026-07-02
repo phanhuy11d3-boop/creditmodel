@@ -19,11 +19,13 @@ uv run scorecard run --config configs/home_credit.yaml
 This runs the full development pipeline:
 
 ```
-ingest → validate (pandera) → temporal split → monotonic binning (OptBinning)
-→ WoE/IV → IV filter → iterative VIF → forward selection → statsmodels Logit
-→ sign check + sklearn parity → calibration → scorecard scaling → Master Scale
-→ evaluate (train/test/OOT) → freeze PSI/CSI reference → persist artifacts
-→ generate MDD + figures
+ingest → validate (pandera) → sample design (default definition / cohorts / exclusions /
+seasoning) → temporal split → monotonic binning (OptBinning) → WoE/IV → IV filter →
+iterative VIF → forward selection → statsmodels Logit → sign check + sklearn parity →
+calibration → scorecard scaling → Master Scale → discrimination with bootstrap CIs + .632+
+optimism → calibration backtest (Brier/ECE/Jeffreys traffic light) → champion-vs-challenger
+(DeLong) → explainability (SHAP) → fairness (AIR/proxy) → freeze PSI/CSI reference →
+governance model card → persist artifacts → generate 16-chapter MDD + figures
 ```
 
 Outputs:
@@ -31,16 +33,25 @@ Outputs:
 | Path | Contents |
 | --- | --- |
 | `artifacts/model.json` | The complete, serialized model (the artifacts *are* the model). |
+| `artifacts/model_card.json` | Governance metadata: git SHA, hashes, versions, assumptions/limitations register. |
+| `artifacts/sample_design.json` | Cohorts, exclusions, default definition, dev sizes, per-cohort base rate. |
+| `artifacts/discrimination.json` | AUC/Gini/KS with bootstrap CIs, partial AUC, Somers' D, .632+ optimism. |
+| `artifacts/calibration_backtest.json` | Brier/ECE/HL + per-grade Jeffreys traffic light + grade HHI. |
+| `artifacts/benchmark.json` | Champion vs challenger: OOT Gini±CI, DeLong test, verdict. |
+| `artifacts/global_importance.json` | SHAP global importance + interpretability parity. |
+| `artifacts/fairness.json` | AIR / SMD / SPD / EOD per protected attribute + proxy scan. |
 | `artifacts/tables/*.csv` | IV, per-characteristic WoE, master scale, metrics. |
-| `reports/figures/*.png` | ROC, CAP, calibration (Hosmer-Lemeshow), score distribution. |
-| `reports/mdd/*.{md,html}` | Model Development Document. |
+| `reports/figures/*.png` | ROC, CAP, calibration, score distribution, reliability curve, SHAP summary. |
+| `reports/mdd/*.{md,html}` | Model Development Document — 16 per-chapter files + `index.html` + combined document. |
 
 ## Other commands
 
 ```bash
-uv run scorecard evaluate --config configs/home_credit.yaml          # re-run eval from artifacts
-uv run scorecard monitor  --config configs/home_credit.yaml --new-data new.csv   # PSI/CSI vs frozen ref
-uv run scorecard serve                                                 # FastAPI on :8000
+uv run scorecard evaluate --config configs/home_credit.yaml            # re-run eval from artifacts
+uv run scorecard report   --config configs/home_credit.yaml            # regenerate the MDD from artifacts (deterministic)
+uv run scorecard monitor  --config configs/home_credit.yaml --new-data new.csv --period-id 2025-Q1   # PSI/CSI + run-log
+uv run scorecard monitor-report --config configs/home_credit.yaml      # PSI/CSI trend report over logged periods
+uv run scorecard serve                                                 # FastAPI on :8000 (/score + /explain)
 ```
 
 ## Make targets
@@ -72,9 +83,13 @@ inference).
 | Endpoint | Description |
 | --- | --- |
 | `POST /score` | One applicant → `{score, pd, rating_grade, points_breakdown, reason_codes}`. |
+| `POST /explain` | Score + points reason codes **+ SHAP-based rationale + points/SHAP agreement** (§5.8). |
 | `POST /batch-score` | JSON list of applicants. |
 | `GET /model-info` | Feature list, scaling constants, model version/hash. |
 | `GET /health` | Liveness + loaded model version. |
+
+The reportable model's SHAP values are **exact and closed-form** (linear in WoE), so
+`/explain` adds no heavy dependency to the serving container.
 
 ```bash
 curl -X POST localhost:8000/score -H 'content-type: application/json' \
@@ -124,7 +139,19 @@ fast with a clear message. Key sections:
 | `calibration` | `anchor_default_rate` (null = train base rate) |
 | `scaling` | `pdo`, `target_score`, `target_odds`, `rating_grades`, `round_points` |
 | `monitoring` | `psi_bins`, `psi_warn`, `psi_alert` |
+| `sample_design` | default definition (DPD/cure/re-default), exclusions, `cohort_key`, seasoning, DPD/status/origination columns |
+| `reject_inference` | `enabled`, `reject_data_path`, `method`, `bad_rate_multiplier`, `parcels` |
+| `discrimination` | `bootstrap_iterations`, `bootstrap_method`, `confidence_level`, partial-AUC, Somers' D |
+| `benchmark` | `challenger`, `challenger_params`, `delong_test`, verdict thresholds |
+| `calibration_extended` | Brier/ECE toggles, `hosmer_lemeshow_groups`, per-grade Jeffreys + traffic light |
+| `fairness` | `protected_attributes`, AIR warn/alert thresholds, `proxy_scan`, `acknowledge_failure` |
+| `explainability` | `shap_enabled`, `shap_sample_size`, `reason_codes_top_n`, parity top-K |
+| `monitoring_extended` | `runlog_backend` (sqlite\|jsonl), `runlog_path`, `cadence`, trend min periods |
+| `governance` | `model_id`, `model_name`, `model_tier`, owner/developer/validator, review dates |
 | `tracking` | `mlflow_enabled`, `mlflow_uri` |
+
+`configs/german_credit.yaml` is the offline demo (synthetic German-Credit-shaped data) that
+exercises fairness (`age_years`, `foreign_worker`) and is the home for reject-inference examples.
 
 ---
 
@@ -166,21 +193,29 @@ columns.
 
 ```
 src/creditscorecard/
-  config.py          pydantic-settings config (YAML load/validate/merge)
+  config.py          pydantic-settings config (YAML load/validate/merge) — 20 blocks
   logging.py         structured logging
-  data/              adapters (csv|synthetic), pandera schema, temporal split
+  data/              adapters (csv|synthetic), pandera schema, split;
+                     definition_of_default (Basel default/cure/cohorts/exclusions), reject_inference
   features/          binning (OptBinning, frozen specs), WoE/IV, selection (IV/VIF/forward)
   model/             train (Logit + sign check + sklearn parity), calibrate, scorecard scaling
-  evaluation/        metrics (AUC/Gini/KS), curves, stability (PSI/CSI frozen bins)
-  monitoring/        PSI/CSI runner with warn/alert escalation
+  evaluation/        discrimination (CIs + .632+), calibration (Brier/ECE/Jeffreys),
+                     benchmark (challenger + DeLong), fairness (AIR/proxy), explainability (SHAP),
+                     curves, stability (PSI/CSI frozen bins), metrics (shim)
+  monitoring/        monitor (PSI/CSI + escalation), runlog (multi-period store/trend/AvE/migration)
+  governance/        metadata (model card: git SHA, hashes, assumptions/limitations register)
   registry.py        artifact save/load + content-hash version (+ optional MLflow)
-  scoring.py         artifact-only scorer (shared by pipeline & API)
+  scoring.py         artifact-only scorer + native linear-SHAP explain (shared by pipeline & API)
   reasons.py         adverse-action reason codes
-  reporting.py       MDD (markdown + HTML)
+  reporting/         MDD package — one module per chapter under mdd_sections/ (16 chapters), deterministic
   pipeline.py        orchestrates the one command
-  cli.py             Typer CLI: run / evaluate / monitor / serve
-app/api.py           FastAPI service (artifacts only)
-tests/               constraint guards + e2e (≥85% coverage)
+  cli.py             Typer CLI: run / evaluate / report / monitor / monitor-report / serve
+app/api.py           FastAPI service (artifacts only): /score, /explain, /batch-score, /model-info, /health
+tests/               constraint guards + e2e (≥85% overall; ≥95% on domain modules)
 ```
+
+See [`reports/refactor/00_diagnostic.md`](reports/refactor/00_diagnostic.md) and
+[`reports/refactor/progress.md`](reports/refactor/progress.md) for the full refactor rationale,
+module specifications, and per-phase commit history.
 
 Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).

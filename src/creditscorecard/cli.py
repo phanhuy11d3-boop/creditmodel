@@ -107,6 +107,18 @@ def monitor_report(config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c"))
 
 
 @app.command()
+def report(config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c")) -> None:
+    """Regenerate the MDD from saved artifacts only (no retraining; deterministic)."""
+    configure_logging()
+    from creditscorecard.reporting import regenerate_mdd
+
+    cfg = load_config(config)
+    paths = regenerate_mdd(cfg)
+    typer.echo(f"MDD index:    {paths['index']}")
+    typer.echo(f"Combined MDD: {paths['html']}")
+
+
+@app.command()
 def serve(
     config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c"),
     host: str = typer.Option("0.0.0.0", "--host"),
