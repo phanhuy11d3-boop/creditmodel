@@ -426,7 +426,7 @@ def _build_validation_summary(
     gap = anchor_gap(calibration.mean_pd_after, calibration.anchor_rate)
     curve = curve_shape_check(table, n_se=v.curve_shape_n_se)
 
-    return {
+    summary = {
         "discriminatory_power": {
             "gini": _threshold_row("gini_oot", float(oot_row["gini"]), v.gini_min, "min"),
             "ks": _threshold_row("ks_oot", float(oot_row["ks"]), v.ks_min, "min"),
@@ -446,6 +446,35 @@ def _build_validation_summary(
             },
         },
     }
+    summary["overall"] = _overall_verdict(summary)
+    return summary
+
+
+def _overall_verdict(summary: dict[str, Any]) -> dict[str, Any]:
+    """Aggregate the per-check PASS/FAIL into one honest model verdict.
+
+    A failure on the **core discrimination** checks (Gini/KS on OOT) is disqualifying →
+    NOT APPROVED; a failure only on calibration/concentration is CONDITIONAL (usable but
+    flagged for remediation); all pass → APPROVED. This prevents a report with FAILs from
+    being read as "ready" — the report states the verdict explicitly.
+    """
+    checks = {
+        "gini_oot": summary["discriminatory_power"]["gini"]["status"],
+        "ks_oot": summary["discriminatory_power"]["ks"]["status"],
+        "hhi": summary["stability_concentration"]["hhi"]["status"],
+        "mape": summary["calibration_accuracy"]["mape"]["status"],
+        "anchor_gap": summary["calibration_accuracy"]["anchor_gap"]["status"],
+        "curve_shape": summary["calibration_accuracy"]["curve_shape"]["status"],
+    }
+    failed = [k for k, s in checks.items() if s == "FAIL"]
+    discrimination_failed = any(k in ("gini_oot", "ks_oot") for k in failed)
+    if not failed:
+        verdict = "APPROVED"
+    elif discrimination_failed:
+        verdict = "NOT APPROVED"
+    else:
+        verdict = "CONDITIONAL"
+    return {"verdict": verdict, "failed_checks": failed}
 
 
 def _sample_info(config: Config, split: SplitData) -> dict[str, Any]:

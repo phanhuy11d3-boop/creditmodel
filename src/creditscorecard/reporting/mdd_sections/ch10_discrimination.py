@@ -46,7 +46,8 @@ def render(ctx: MddContext) -> str:
                 f"OOB {opt.get('oob_auc', float('nan')):.4f}).\n"
             )
 
-    overlap = p.get("split_stability", {}).get("gini_train_vs_oot", {})
+    ss = p.get("split_stability", {})
+    overlap = ss.get("gini_train_vs_oot", {})
     if overlap:
         a = overlap["train_gini_ci"]
         b = overlap["oot_gini_ci"]
@@ -57,6 +58,14 @@ def render(ctx: MddContext) -> str:
             f"(point drop {overlap['point_drop']:+.4f}) — **{flag}**.\n"
             f"- {overlap['verdict']}\n"
         )
+        # Cross-read with PSI: disjoint CI + stable input ⇒ overfitting, not covariate drift.
+        oot_psi = ss.get("psi", {}).get("oot", {})
+        if not overlap["ci_overlap"] and oot_psi.get("status") == "OK":
+            parts.append(
+                f"- **Interpretation:** PSI(oot vs train)={oot_psi['psi']:.4f} [OK] → the input "
+                "distribution is stable, so the discrimination drop reflects **overfitting to "
+                "train / small-sample variance**, not covariate shift.\n"
+            )
     parts.append("### Figures\n")
     for label in ("roc", "cap", "calibration", "score_distribution"):
         if label in ctx.figures:

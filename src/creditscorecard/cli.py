@@ -29,6 +29,15 @@ def run(
     cfg = load_config(config)
     result = run_pipeline(cfg)
     typer.echo("\nPerformance:\n" + result.metrics.to_string(index=False))
+    overall = result.payload.get("validation_summary", {}).get("overall", {})
+    if overall:
+        verdict = overall.get("verdict", "?")
+        failed = overall.get("failed_checks", [])
+        colour = {"APPROVED": "green", "CONDITIONAL": "yellow", "NOT APPROVED": "red"}.get(verdict)
+        msg = f"\nValidation verdict: {verdict}" + (
+            f"  (failed: {', '.join(failed)})" if failed else ""
+        )
+        typer.secho(msg, fg=colour)
     bm = result.payload.get("benchmark", {})
     if bm.get("under_specified"):
         typer.secho("\n⚠️  " + bm.get("verdict", "Challenger beats reportable model."), fg="yellow")

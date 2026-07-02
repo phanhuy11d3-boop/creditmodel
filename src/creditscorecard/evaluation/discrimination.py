@@ -122,11 +122,12 @@ def gini_stability_verdict(per_split: dict) -> dict:
     b = (float(oot["lower"]), float(oot["upper"]))
     overlap = intervals_overlap(a, b)
     verdict = (
-        "Train and OOT Gini CIs overlap → the train→OOT drop is within sampling noise "
-        "(no evidence of drift)."
+        "Train and OOT Gini CIs overlap → the train→OOT change is within sampling noise "
+        "(no significant degradation)."
         if overlap
-        else "Train and OOT Gini CIs are disjoint → statistically significant degradation on "
-        "OOT (possible drift; investigate / revalidate)."
+        else "Train and OOT Gini CIs are disjoint → statistically significant OOT degradation. "
+        "Cross-check PSI: if input distribution is stable (PSI OK) this points to overfitting / "
+        "small-sample variance rather than covariate shift. Investigate before approval."
     )
     return {
         "train_gini_ci": [a[0], a[1]],

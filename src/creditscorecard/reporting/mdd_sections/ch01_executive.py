@@ -15,6 +15,20 @@ def render(ctx: MddContext) -> str:
         f"## {NUMBER}. {TITLE}\n",
         generated_stamp(p) + "\n",
     ]
+    overall = p.get("validation_summary", {}).get("overall", {})
+    if overall:
+        verdict = overall.get("verdict", "?")
+        badge = {"APPROVED": "✅", "CONDITIONAL": "⚠️", "NOT APPROVED": "⛔"}.get(verdict, "")
+        failed = overall.get("failed_checks", [])
+        parts.append(
+            f"> **Validation verdict: {badge} {verdict}**"
+            + (
+                f" — failed checks: {', '.join(failed)}."
+                if failed
+                else " — all threshold checks pass."
+            )
+            + "\n"
+        )
     if gov:
         parts.append(
             f"- **Model ID / name:** `{gov.get('model_id')}` — {gov.get('model_name')}  ·  "

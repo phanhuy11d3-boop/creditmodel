@@ -111,6 +111,36 @@ def test_monitor_report_includes_hhi(config, pipeline_payload, dataset):
     assert report.hhi_status in {"OK", "ALERT"}
 
 
+def test_overall_verdict_logic():
+    from creditscorecard.pipeline import _overall_verdict
+
+    def summary(gini, ks, hhi, mape, anchor, curve):
+        return {
+            "discriminatory_power": {"gini": {"status": gini}, "ks": {"status": ks}},
+            "stability_concentration": {"hhi": {"status": hhi}},
+            "calibration_accuracy": {
+                "mape": {"status": mape},
+                "anchor_gap": {"status": anchor},
+                "curve_shape": {"status": curve},
+            },
+        }
+
+    all_pass = summary("PASS", "PASS", "PASS", "PASS", "PASS", "PASS")
+    assert _overall_verdict(all_pass)["verdict"] == "APPROVED"
+
+    disc_fail = summary("FAIL", "PASS", "PASS", "PASS", "PASS", "PASS")
+    v = _overall_verdict(disc_fail)
+    assert v["verdict"] == "NOT APPROVED" and "gini_oot" in v["failed_checks"]
+
+    calib_only = summary("PASS", "PASS", "PASS", "FAIL", "PASS", "PASS")
+    assert _overall_verdict(calib_only)["verdict"] == "CONDITIONAL"
+
+
+def test_pipeline_verdict_present(pipeline_payload):
+    overall = pipeline_payload["validation_summary"]["overall"]
+    assert overall["verdict"] in {"APPROVED", "CONDITIONAL", "NOT APPROVED"}
+
+
 def test_anchor_gap_zero_when_anchor_is_zero():
     assert anchor_gap(0.05, 0.0) == 0.0
 
