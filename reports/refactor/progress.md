@@ -197,6 +197,37 @@ document filename preserved).
   Phase G trimming (risk R3).
 
 ### Commit
-- Phase F: `<pending>`.
+- Phase F: `13e533b`.
 
-## Phase G — Green everything ⏳
+## Phase G — Green everything ✅ (complete)
+
+- **Tests:** full suite **149 passed**, exit 0. CI job (ruff check + ruff format --check + mypy
+  + pytest `--cov-fail-under=85`) mirrors the local gate.
+- **Lint/format/types:** ruff, `ruff format --check`, mypy all clean (60 source files).
+- **Coverage:** TOTAL 95% (≥85 gate); domain gates met — features/ 95.8%, model/ ≥95%,
+  evaluation/ modules 95–100%, `definition_of_default.py` 97%, `reject_inference.py` 99%.
+- **`make all` path:** `bootstrap → lint → test → run` verified; `scorecard run` on the
+  synthetic `base.yaml` (the config Docker bakes) produces all artifacts + 16-chapter MDD.
+- **Serving:** `/score`, `/explain`, `/batch-score`, `/model-info`, `/health` verified via
+  `TestClient`; `/explain` returns points + SHAP reasons + agreement.
+- **Docker:** image not buildable in this environment (no daemon) — documented in
+  [`known_gaps.md`](known_gaps.md); Dockerfile/compose present and correct.
+
+### Definition of Done (§9) checklist
+1. ✅ `00_diagnostic.md` exists and matches final code (post-implementation reconciliation added).
+2. ✅ Config drives all validation thresholds (algorithmic constants noted in known_gaps).
+3. ✅ Every §5 module implemented (reject inference off-by-default; documented).
+4. ✅ Discrimination/calibration/fairness metrics all carry uncertainty/significance.
+5. ✅ Champion–challenger with DeLong test + verdict.
+6. ✅ Reject inference runs (3 methods) with sensitivity; disabled path logs the KGB limitation.
+7. ✅ Fairness on 2 protected attributes (German Credit); N/A path documented for Home Credit.
+8. ✅ Monitoring run-log stores entries; trend report runs.
+9. ✅ Governance model card on every run; hashes all artifacts.
+10. ✅ MDD chapters 1–16 auto-generated; regeneration byte-identical.
+11. ✅ §7 tests pass; coverage thresholds met.
+12. ✅ README documents modules, config, CLI, endpoints.
+13. ✅ progress.md documents Phases A–G with commit hashes.
+14. ⚠️ CI defined and green locally; Docker build deferred (known_gaps #1).
+
+### Commit
+- Phase G: `b9649ce`.

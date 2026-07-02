@@ -253,3 +253,29 @@ All 10 gaps become first-class modules; the MDD (§6, 16 chapters) consumes thei
 Phase A is complete. Phase B begins with the config schema (§4) + governance metadata (§5.9) +
 sample design (§5.1), each landing with tests green before the next, per §8. No source has been
 edited yet.
+
+---
+
+## Post-implementation reconciliation (Phases B–G)
+
+The plan above was executed as written. Deviations worth recording so this document matches
+the final code state (DoD §9.1):
+
+- **`evaluation/metrics.py`** was **kept as a thin re-export shim** of `auc/gini/ks` from the
+  new `discrimination.py` (not deleted) so `pipeline`/`cli`/tests keep a single import surface
+  (risk R2). `discrimination.py` is the CI-bearing reportable source.
+- **`reporting.py` → `reporting/` package** with `mdd_sections/` (16 chapter modules) + a
+  deterministic orchestrator; `datetime.now()` removed from the MDD so regeneration is
+  byte-identical (DoD §9.10). Added `scorecard report` to regenerate from artifacts.
+- **`sample_design`** config gained optional column-name fields (`dpd_column`, `status_column`,
+  `origination_date_column`, …) — §4's skeleton did not name the DPD/status columns that §5.1
+  requires; seasoning is keyed off the *explicit* origination column so it never perturbs the
+  legacy split on flat data (risk R1).
+- **SHAP** is installed as a real dependency (`shap==0.51`) and used for the challenger; the
+  reportable model uses exact native linear SHAP (no serve-time dependency). The impurity
+  fallback (risk R4) remains for environments without shap.
+- **Open items** are tracked in [`known_gaps.md`](known_gaps.md): Docker build not runnable in
+  this environment (Dockerfile present, endpoints verified via TestClient), `woe.py` per-file
+  coverage (features/ package aggregate ≥95%), and a few algorithmic constants left in code.
+
+Per-phase commit hashes are in [`progress.md`](progress.md).
